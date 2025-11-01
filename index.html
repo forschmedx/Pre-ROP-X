@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>PRE-ROP X Demo Monitor</title>
+  <meta name="description" content="Simple demo dashboard for PRE-ROP X with live vitals, dark mode, and modal detail with real-time charts." />
+  <style>
+    :root{
+      /* Light theme tokens */
+      --brand:#6bbcff; /* light blue */
+      --bg:#f4f9ff;
+      --surface:#ffffff;
+      --ink:#0f172a; /* slate-900 */
+      --muted:#64748b; /* slate-500 */
+      --ring:rgba(107,188,255,0.6);
+      --ok:#10b981; /* emerald */
+      --warn:#f59e0b; /* amber */
+      --bad:#ef4444; /* red */
+      --chrome:140px;
+      --scenario-normal-bg:#d1fae5;
+      --scenario-normal-border:#34d399;
+      --scenario-normal-text:#064e3b;
+      --scenario-moderate-bg:#fef3c7;
+      --scenario-moderate-border:#f59e0b;
+      --scenario-moderate-text:#78350f;
+      --scenario-critical-bg:#fee2e2;
+      --scenario-critical-border:#ef4444;
+      --scenario-critical-text:#7f1d1d;
+    }
+    html[data-theme="dark"]{
+      /* Dark theme tokens */
+      --brand:#60a5fa; /* softer blue */
+      --bg:#0b1220; /* deep navy */
+      --surface:#0f172a; /* slate-900 */
+      --ink:#e5e7eb; /* light text */
+      --muted:#94a3b8; /* slate-400 */
+      --ring:rgba(96,165,250,0.5);
+      --scenario-normal-bg:rgba(16,185,129,0.22);
+      --scenario-normal-border:#34d399;
+      --scenario-normal-text:#6ee7b7;
+      --scenario-moderate-bg:rgba(251,191,36,0.25);
+      --scenario-moderate-border:#fbbf24;
+      --scenario-moderate-text:#fcd34d;
+      --scenario-critical-bg:rgba(248,113,113,0.28);
+      --scenario-critical-border:#f87171;
+      --scenario-critical-text:#fca5a5;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{ margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif; background:var(--bg); color:var(--ink); line-height:1.5; }
+    a{color:inherit}
+    .container{max-width:1200px; margin-inline:auto; padding:24px;}
+
+    /* Header */
+    header{ position:sticky; top:0; z-index:20; backdrop-filter:saturate(1.2) blur(6px); background:color-mix(in hsl, var(--bg) 85%, transparent); border-bottom:1px solid color-mix(in hsl, var(--ink) 15%, transparent); }
+    .brand{ display:flex; align-items:center; gap:12px; font-weight:800; letter-spacing:0.3px; }
+    .logo{ display:grid; place-items:center; width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg, var(--brand), color-mix(in hsl, var(--brand) 50%, white)); color:#001933; font-weight:900; box-shadow:0 6px 16px rgba(0,0,0,.15); }
+    .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .toolbar{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 24px}
+
+    button, .btn{ appearance:none; border:1px solid color-mix(in hsl, var(--ink) 18%, transparent); background:var(--surface); color:var(--ink); padding:8px 12px; border-radius:12px; font-weight:600; cursor:pointer; transition:transform .08s ease, box-shadow .2s ease, background .2s; box-shadow:0 2px 6px rgba(0,0,0,.06); }
+    button:hover{transform:translateY(-1px)}
+    button:focus-visible{outline:3px solid var(--ring); outline-offset:2px}
+    .btn-primary{background:var(--brand); border-color:transparent; color:#002244}
+
+    /* Intro */
+    .intro{display:grid; grid-template-columns:1fr; gap:16px; padding-block:10px}
+    .intro p{margin:0; color:var(--muted)}
+
+    /* ===== Overview board (new layout) ===== */
+    .board{ display:grid; grid-template-columns:1fr; gap:28px; align-items:start; }
+    @media (min-width:900px){ .board{ grid-template-columns:1fr 1fr 1fr; } }
+
+    .patient-card{ display:grid; gap:12px; align-content:start; padding:18px; border-radius:18px; border:1px solid color-mix(in hsl, var(--ink) 10%, transparent); background:var(--surface); box-shadow:0 6px 18px rgba(0,0,0,.06); cursor:pointer; transition:transform .12s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease; }
+    .patient-card:hover{ box-shadow:0 12px 30px rgba(0,0,0,.12); transform:translateY(-2px); }
+    .patient-card:focus-visible{outline:3px solid var(--ring); outline-offset:3px;}
+    .patient-card[data-scenario="normal"]{ background:var(--scenario-normal-bg); border-color:var(--scenario-normal-border); }
+    .patient-card[data-scenario="moderate"]{ background:var(--scenario-moderate-bg); border-color:var(--scenario-moderate-border); }
+    .patient-card[data-scenario="critical"]{ background:var(--scenario-critical-bg); border-color:var(--scenario-critical-border); }
+    .patient-card[data-scenario="unknown"]{ background:color-mix(in hsl, var(--brand) 8%, var(--surface)); border-style:dashed; }
+    .card-title{ display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:12px; }
+    .card-status{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:color-mix(in hsl, var(--ink) 60%, white); padding:2px 10px; border-radius:999px; background:color-mix(in hsl, var(--ink) 10%, transparent); }
+    .patient-card[data-scenario="normal"] .card-status{ color:var(--scenario-normal-text); background:color-mix(in srgb, var(--scenario-normal-border) 20%, white 80%); }
+    .patient-card[data-scenario="moderate"] .card-status{ color:var(--scenario-moderate-text); background:color-mix(in srgb, var(--scenario-moderate-border) 25%, white 75%); }
+    .patient-card[data-scenario="critical"] .card-status{ color:var(--scenario-critical-text); background:color-mix(in srgb, var(--scenario-critical-border) 25%, white 75%); }
+    .patient-card[data-scenario="unknown"] .card-status{ color:color-mix(in hsl, var(--muted) 80%, black); background:color-mix(in hsl, var(--muted) 20%, white); }
+    .col-head{ font-weight:800; font-size:18px; margin-bottom:4px; }
+
+    .tile{ display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; border-radius:12px; background:color-mix(in hsl, var(--brand) 10%, var(--surface)); border:1px solid color-mix(in hsl, var(--ink) 10%, transparent); box-shadow:0 4px 12px rgba(0,0,0,.05); transition: box-shadow .2s ease, transform .06s ease; }
+    .patient-card:hover .tile{ box-shadow:0 8px 20px rgba(0,0,0,.08); }
+    .patient-card[data-scenario="normal"] .tile{ background:color-mix(in srgb, var(--scenario-normal-border) 10%, var(--surface)); border-color:color-mix(in srgb, var(--scenario-normal-border) 45%, transparent); }
+    .patient-card[data-scenario="moderate"] .tile{ background:color-mix(in srgb, var(--scenario-moderate-border) 12%, var(--surface)); border-color:color-mix(in srgb, var(--scenario-moderate-border) 45%, transparent); }
+    .patient-card[data-scenario="critical"] .tile{ background:color-mix(in srgb, var(--scenario-critical-border) 14%, var(--surface)); border-color:color-mix(in srgb, var(--scenario-critical-border) 55%, transparent); }
+    .tile .label{ color:var(--muted); text-transform:none; }
+    .tile .value{ font-weight:800; font-size:18px; }
+
+    .muted{color:var(--muted);}
+
+    /* Modal */
+    .modal-wrap{position:fixed; inset:0; display:none; place-items:center; z-index:50}
+    .backdrop{position:absolute; inset:0; background:rgba(0,0,0,.35); backdrop-filter: blur(6px);}
+    .modal{position:relative; width:min(1100px, 95vw); max-height:94vh; overflow:auto; background:var(--surface); color:var(--ink); border-radius:18px; border:1px solid color-mix(in hsl, var(--ink) 15%, transparent); padding:18px; box-shadow:0 30px 60px rgba(0,0,0,.35)}
+    .modal header{ position:sticky; top:0; z-index:5; background:inherit; border-bottom:1px solid color-mix(in hsl, var(--ink) 12%, transparent); border-radius:16px 16px 0 0}
+    .modal .toolbar{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 8px}
+    .modal .content{ padding:14px 8px 18px; display:grid; grid-template-columns:repeat(2,1fr); gap:12px }
+    .close{position:absolute; right:12px; top:12px}
+    .modal header .controls{display:flex; flex-wrap:nowrap; align-items:center; gap:10px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-block:6px}
+    .modal header .vitals{display:flex; flex-wrap:nowrap; gap:10px}
+    .modal header .vital{flex:0 0 auto; min-width:auto; white-space:nowrap; padding:8px 10px; background:color-mix(in hsl, var(--brand) 12%, var(--surface)); border-radius:12px; border:1px solid color-mix(in hsl, var(--ink) 12%, transparent)}
+
+    /* Charts */
+    .chart{background:color-mix(in hsl, var(--brand) 8%, var(--surface)); border:1px solid color-mix(in hsl, var(--ink) 10%, transparent); border-radius:14px; padding:12px}
+    .chart-head{display:flex; flex-direction:column; align-items:flex-start; gap:4px; margin:0 0 6px 4px}
+    .chart-head .title{font-weight:800}
+    .chart-head .value{font-size:20px; font-weight:800}
+    .chart-plot{position:relative}
+    .chart-plot svg{display:block; width:100%; height:clamp(120px, 22vh, 180px)}
+    .chart-marker{position:absolute; top:0; left:0; transform:translate(-50%,-50%); background:var(--surface); border:2px solid var(--brand); color:var(--brand); border-radius:10px; padding:2px 8px; font-size:12px; font-weight:700; box-shadow:0 4px 10px rgba(0,0,0,.12); opacity:0; transition:opacity .2s ease; pointer-events:none; z-index:4;}
+    html[data-theme="dark"] .chart-marker{background:rgba(15,23,42,0.92);}
+    .legend{display:flex; gap:12px; font-size:12px; color:var(--muted); margin:6px 4px 0}
+
+    /* Portrait fill-height scrolling */
+    @media (orientation: portrait){
+      .container{padding-inline:16px}
+      /* Keep modal inside viewport and show all charts without scrolling */
+      .modal{ width:min(1100px, 95vw); max-height:94vh; border-radius:12px; }
+      .modal .content{ display:grid; grid-template-columns:repeat(2,1fr); height:auto; overflow:visible; }
+      .chart{ min-height:unset; }
+      .chart-plot svg{ height:clamp(110px, 20vh, 170px); }
+    }
+    @media (max-width: 600px){
+      .modal{ width:100vw; max-height:100dvh; border-radius:0; }
+      .modal .content{ display:block; max-height:calc(100dvh - 90px); overflow-y:auto; scroll-snap-type:y mandatory; }
+      .chart{ min-height:88dvh; scroll-snap-align:start; }
+      .chart-plot svg{ height:64dvh; }
+    }
+
+    .sim-panel{margin-top:40px; padding:28px; background:color-mix(in hsl, var(--brand) 10%, var(--surface)); border:1px solid color-mix(in hsl, var(--ink) 14%, transparent); border-radius:16px; box-shadow:0 10px 28px rgba(0,0,0,.08);}
+    .sim-panel h2{margin:0 0 4px;}
+    .sim-panel_blurb{margin:0 0 18px; font-size:14px; color:var(--muted);}
+    .scenario-grid{display:grid; gap:16px;}
+    .scenario-card{background:var(--surface); border:1px solid color-mix(in hsl, var(--ink) 12%, transparent); border-radius:14px; padding:16px; box-shadow:0 6px 16px rgba(0,0,0,.06); transition:border-color .2s ease, background .2s ease;}
+    .scenario-card[data-scenario="normal"]{ background:color-mix(in srgb, var(--scenario-normal-border) 12%, var(--surface)); border-color:var(--scenario-normal-border); }
+    .scenario-card[data-scenario="moderate"]{ background:color-mix(in srgb, var(--scenario-moderate-border) 14%, var(--surface)); border-color:var(--scenario-moderate-border); }
+    .scenario-card[data-scenario="critical"]{ background:color-mix(in srgb, var(--scenario-critical-border) 16%, var(--surface)); border-color:var(--scenario-critical-border); }
+    .scenario-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
+    .scenario-head h3{margin:0; font-size:18px;}
+    .scenario-pill{display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; background:color-mix(in hsl, var(--brand) 18%, var(--surface)); font-size:12px; font-weight:600; color:var(--ink); transition:background .2s ease, color .2s ease;}
+    .scenario-card[data-scenario="normal"] .scenario-pill{ color:var(--scenario-normal-text); background:color-mix(in srgb, var(--scenario-normal-border) 25%, white 75%); }
+    .scenario-card[data-scenario="moderate"] .scenario-pill{ color:var(--scenario-moderate-text); background:color-mix(in srgb, var(--scenario-moderate-border) 28%, white 72%); }
+    .scenario-card[data-scenario="critical"] .scenario-pill{ color:var(--scenario-critical-text); background:color-mix(in srgb, var(--scenario-critical-border) 30%, white 70%); }
+    .scenario-label{font-size:12px; text-transform:uppercase; letter-spacing:0.04em; font-weight:700; color:var(--muted); display:block; margin-bottom:6px;}
+    .scenario-select{width:100%; padding:10px 12px; border-radius:10px; border:1px solid color-mix(in hsl, var(--ink) 14%, transparent); background:var(--surface); color:var(--ink); font-weight:600;}
+    .scenario-select:focus-visible{outline:3px solid var(--ring); outline-offset:2px;}
+    .scenario-desc{margin:12px 0 0; font-size:13px; color:var(--muted); min-height:36px;}
+    .demo-controls{display:flex; justify-content:flex-end; margin-top:24px;}
+    .demo-controls .btn-primary{padding-inline:20px;}
+    @media (min-width:900px){
+      .scenario-grid{grid-template-columns:repeat(3,1fr);}
+    }
+    @media (max-width:600px){
+      .sim-panel{padding:20px;}
+      .scenario-card{padding:14px;}
+    }
+
+    footer{ color:var(--muted); text-align:center; padding:24px}
+  
+  /* === Compact chart sizing overrides (no layout changes) === */
+  .modal .content{ gap:8px !important; }
+  .chart{ padding:8px !important; }
+  .chart-head .value{ font-size:18px !important; }
+  .chart-plot svg{ height:clamp(90px, 18vh, 140px) !important; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="toolbar container" role="navigation" aria-label="Top bar">
+      <div class="brand" aria-label="PRE-ROP X brand">
+        <div class="logo" aria-hidden="true">PX</div>
+        <div>
+          <div style="font-size:18px; color:var(--muted); font-weight:700;">PRE-ROP X</div>
+          <div style="font-size:12px; color:var(--muted)">Real-time neonatal screening demo</div>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="themeBtn" class="btn" aria-pressed="false" title="Toggle dark mode">Dark mode</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" id="main">
+    <section class="intro">
+      <h1 style="margin:0">Overview</h1>
+      <p>
+        Live bedside view for three babies. Tap any tile to open a floating detail window with real-time charts.
+      </p>
+    </section>
+
+    <!-- ===== Overview Board (three columns) ===== -->
+    <section class="board" aria-label="Three baby columns">
+      <!-- Column: Baby One -->
+      <article class="patient-card" data-baby="1" data-scenario="unknown" tabindex="0" role="button" aria-label="Open Baby One detail">
+        <div class="card-title">
+          <div class="col-head">Baby One</div>
+          <span class="card-status" id="status-1">Waiting</span>
+        </div>
+        <div class="tile" aria-label="Baby One SpO2">
+          <span class="label">SpO<sub>2</sub></span>
+          <span class="value" id="b1-spo2">--</span>
+        </div>
+        <div class="tile" aria-label="Baby One Heart Rate">
+          <span class="label">Heart Rate</span>
+          <span class="value" id="b1-hr">--</span>
+        </div>
+        <div class="tile" aria-label="Baby One O2 flow">
+          <span class="label">O<sub>2</sub> Flow</span>
+          <span class="value" id="b1-o2">--</span>
+        </div>
+        <div class="tile" aria-label="Baby One Temp">
+          <span class="label">Temp</span>
+          <span class="value" id="b1-temp">--</span>
+        </div>
+      </article>
+
+      <!-- Column: Baby Two -->
+      <article class="patient-card" data-baby="2" data-scenario="unknown" tabindex="0" role="button" aria-label="Open Baby Two detail">
+        <div class="card-title">
+          <div class="col-head">Baby Two</div>
+          <span class="card-status" id="status-2">Waiting</span>
+        </div>
+        <div class="tile" aria-label="Baby Two SpO2">
+          <span class="label">SpO<sub>2</sub></span>
+          <span class="value" id="b2-spo2">--</span>
+        </div>
+        <div class="tile" aria-label="Baby Two Heart Rate">
+          <span class="label">Heart Rate</span>
+          <span class="value" id="b2-hr">--</span>
+        </div>
+        <div class="tile" aria-label="Baby Two O2 flow">
+          <span class="label">O<sub>2</sub> Flow</span>
+          <span class="value" id="b2-o2">--</span>
+        </div>
+        <div class="tile" aria-label="Baby Two Temp">
+          <span class="label">Temp</span>
+          <span class="value" id="b2-temp">--</span>
+        </div>
+      </article>
+
+      <!-- Column: Baby Three -->
+      <article class="patient-card" data-baby="3" data-scenario="unknown" tabindex="0" role="button" aria-label="Open Baby Three detail">
+        <div class="card-title">
+          <div class="col-head">Baby Three</div>
+          <span class="card-status" id="status-3">Waiting</span>
+        </div>
+        <div class="tile" aria-label="Baby Three SpO2">
+          <span class="label">SpO<sub>2</sub></span>
+          <span class="value" id="b3-spo2">--</span>
+        </div>
+        <div class="tile" aria-label="Baby Three Heart Rate">
+          <span class="label">Heart Rate</span>
+          <span class="value" id="b3-hr">--</span>
+        </div>
+        <div class="tile" aria-label="Baby Three O2 flow">
+          <span class="label">O<sub>2</sub> Flow</span>
+          <span class="value" id="b3-o2">--</span>
+        </div>
+        <div class="tile" aria-label="Baby Three Temp">
+          <span class="label">Temp</span>
+          <span class="value" id="b3-temp">--</span>
+        </div>
+      </article>
+    </section>
+
+    <!-- ===== Simulation control panel ===== -->
+    <section class="sim-panel" aria-labelledby="simHeading">
+      <h2 id="simHeading">Simulation scenarios</h2>
+      <p class="sim-panel_blurb">Tune each baseline to explore stable, elevated, or critical conditions before opening the live detail window.</p>
+      <div class="scenario-grid">
+        <div class="scenario-card" data-baby="1" data-scenario="unknown">
+          <div class="scenario-head">
+            <h3>Baby One</h3>
+            <span class="scenario-pill" id="scenario-1-pill">Not set</span>
+          </div>
+          <label class="scenario-label" for="scenario-1">Scenario</label>
+          <select id="scenario-1" class="scenario-select" aria-describedby="scenario-1-desc">
+            <option value="" disabled selected>Select scenario</option>
+            <option value="normal">Stable</option>
+            <option value="moderate">Elevated risk</option>
+            <option value="critical">Critical</option>
+          </select>
+          <p class="scenario-desc" id="scenario-1-desc"></p>
+        </div>
+        <div class="scenario-card" data-baby="2" data-scenario="unknown">
+          <div class="scenario-head">
+            <h3>Baby Two</h3>
+            <span class="scenario-pill" id="scenario-2-pill">Not set</span>
+          </div>
+          <label class="scenario-label" for="scenario-2">Scenario</label>
+          <select id="scenario-2" class="scenario-select" aria-describedby="scenario-2-desc">
+            <option value="" disabled selected>Select scenario</option>
+            <option value="normal">Stable</option>
+            <option value="moderate">Elevated risk</option>
+            <option value="critical">Critical</option>
+          </select>
+          <p class="scenario-desc" id="scenario-2-desc"></p>
+        </div>
+        <div class="scenario-card" data-baby="3" data-scenario="unknown">
+          <div class="scenario-head">
+            <h3>Baby Three</h3>
+            <span class="scenario-pill" id="scenario-3-pill">Not set</span>
+          </div>
+          <label class="scenario-label" for="scenario-3">Scenario</label>
+          <select id="scenario-3" class="scenario-select" aria-describedby="scenario-3-desc">
+            <option value="" disabled selected>Select scenario</option>
+            <option value="normal">Stable</option>
+            <option value="moderate">Elevated risk</option>
+            <option value="critical">Critical</option>
+          </select>
+          <p class="scenario-desc" id="scenario-3-desc"></p>
+        </div>
+      </div>
+      <div class="demo-controls">
+        <button id="demoBtn" class="btn-primary" title="Start or stop the running simulation">Start demo</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal (detail) -->
+  <div class="modal-wrap" id="modalWrap" aria-hidden="true" aria-label="Detail overlay">
+    <div class="backdrop" id="backdrop"></div>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="btn close" id="closeModal" title="Close" aria-label="Close detail">&times;</button>
+      <header>
+        <div class="toolbar">
+          <div>
+            <h2 id="modalTitle" style="margin:0">Baby</h2>
+            <small class="muted" id="modalSub" style="color:var(--muted)">Waiting for live data | 1s cadence | last 60s</small>
+          </div>
+          <div class="controls">
+            <div class="vitals">
+              <div class="vital"><div>SpO<sub>2</sub></div><b id="m-spo2">--%</b></div>
+              <div class="vital"><div>Heart Rate</div><b id="m-hr">-- bpm</b></div>
+              <div class="vital"><div>O<sub>2</sub> Flow</div><b id="m-o2">-- L/min</b></div>
+              <div class="vital"><div>Temp</div><b id="m-temp">-- &deg;C</b></div>
+            </div>
+          </div>
+        </div>
+      </header>
+      <div class="content">
+        <!-- SpO2 -->
+        <div class="chart">
+          <div class="chart-head"><div class="title">SpO<sub>2</sub></div><div class="value" id="val-spo2">--%</div></div>
+          <div class="chart-plot">
+            <div class="chart-marker" id="marker-spo2">--</div>
+            <svg id="chart-spo2" viewBox="0 0 600 220" preserveAspectRatio="none" aria-label="SpO2 line chart">
+              <g id="grid1"></g>
+              <polyline id="line1" fill="none" stroke="var(--brand)" stroke-width="2" points="" />
+            </svg>
+          </div>
+          <div class="legend">Step size: 1 s | Window: 60 s</div>
+        </div>
+        <!-- HR -->
+        <div class="chart">
+          <div class="chart-head"><div class="title">Heart Rate</div><div class="value" id="val-hr">-- bpm</div></div>
+          <div class="chart-plot">
+            <div class="chart-marker" id="marker-hr">--</div>
+            <svg id="chart-hr" viewBox="0 0 600 220" preserveAspectRatio="none" aria-label="Heart rate line chart">
+              <g id="grid2"></g>
+              <polyline id="line2" fill="none" stroke="var(--brand)" stroke-width="2" points="" />
+            </svg>
+          </div>
+          <div class="legend">Step size: 1 s | Window: 60 s</div>
+        </div>
+        <!-- O2 Flow -->
+        <div class="chart">
+          <div class="chart-head"><div class="title">O<sub>2</sub> Flow</div><div class="value" id="val-o2">-- L/min</div></div>
+          <div class="chart-plot">
+            <div class="chart-marker" id="marker-o2">--</div>
+            <svg id="chart-o2" viewBox="0 0 600 220" preserveAspectRatio="none" aria-label="O2 flow line chart">
+              <g id="grid3"></g>
+              <polyline id="line3" fill="none" stroke="var(--brand)" stroke-width="2" points="" />
+            </svg>
+          </div>
+          <div class="legend">Step size: 1 s | Window: 60 s</div>
+        </div>
+        <!-- Temp -->
+        <div class="chart">
+          <div class="chart-head"><div class="title">Temp</div><div class="value" id="val-temp">-- &deg;C</div></div>
+          <div class="chart-plot">
+            <div class="chart-marker" id="marker-temp">--</div>
+            <svg id="chart-temp" viewBox="0 0 600 220" preserveAspectRatio="none" aria-label="Temperature line chart">
+              <g id="grid4"></g>
+              <polyline id="line4" fill="none" stroke="var(--brand)" stroke-width="2" points="" />
+            </svg>
+          </div>
+          <div class="legend">Step size: 1 s | Window: 60 s</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <small>Demo only. Values are simulated. | &copy; <span id="year"></span> PRE-ROP X</small>
+  </footer>
+
+  <script>
+  // ===== Utilities =====
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  const themeBtn = $('#themeBtn');
+  const demoBtn = $('#demoBtn');
+  const modalSub = $('#modalSub');
+  const BABY_IDS = [1, 2, 3];
+  const scenarioSelects = BABY_IDS.reduce((acc, id) => {
+    acc[String(id)] = document.getElementById(`scenario-${id}`);
+    return acc;
+  }, {});
+  const scenarioPills = BABY_IDS.reduce((acc, id) => {
+    acc[String(id)] = document.getElementById(`scenario-${id}-pill`);
+    return acc;
+  }, {});
+  const scenarioDescs = BABY_IDS.reduce((acc, id) => {
+    acc[String(id)] = document.getElementById(`scenario-${id}-desc`);
+    return acc;
+  }, {});
+  const scenarioCards = BABY_IDS.reduce((acc, id) => {
+    acc[String(id)] = document.querySelector(`.scenario-card[data-baby="${id}"]`);
+    return acc;
+  }, {});
+  const patientCards = BABY_IDS.reduce((acc, id) => {
+    acc[String(id)] = document.querySelector(`.patient-card[data-baby="${id}"]`);
+    return acc;
+  }, {});
+  const cardStatusLabels = BABY_IDS.reduce((acc, id) => {
+    acc[String(id)] = document.getElementById(`status-${id}`);
+    return acc;
+  }, {});
+
+  demoBtn.setAttribute('aria-pressed', 'false');
+
+  // Persisted theme
+  const applyTheme = (mode) => {
+    document.documentElement.setAttribute('data-theme', mode);
+    localStorage.setItem('pref-theme', mode);
+    themeBtn.textContent = mode === 'dark' ? 'Switch to light' : 'Switch to dark';
+    themeBtn.setAttribute('aria-pressed', mode === 'dark');
+  };
+  const saved = localStorage.getItem('pref-theme');
+  applyTheme(saved || 'light');
+
+  themeBtn.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+  });
+
+  // Year stamp
+  $('#year').textContent = new Date().getFullYear();
+
+  // ===== Simple SVG line chart (no external libraries) =====
+  class LineChart {
+    constructor(svg, {min=0, max=100, capacity=60}={}) {
+      this.svg = svg;
+      this.min = min;
+      this.max = max;
+      this.capacity = capacity;
+      this.width = 600;
+      this.height = 220;
+      this.leftPad = 3;
+      this.rightPad = 3;
+      this.bottomPad = 3;
+      this.topPad = 12;
+      this.points = [];
+      this.poly = svg.querySelector('polyline');
+      const grid = svg.querySelector('g');
+      if (grid) {
+        grid.innerHTML = '';
+        const rows = 4;
+        const cols = 6;
+        for (let r = 1; r <= rows; r++) {
+          const y = (this.height / (rows + 1)) * r;
+          grid.insertAdjacentHTML('beforeend', `<line x1="0" y1="${y.toFixed(1)}" x2="${this.width}" y2="${y.toFixed(1)}" stroke="currentColor" opacity="0.12"/>`);
+        }
+        for (let c = 1; c <= cols; c++) {
+          const x = (this.width / (cols + 1)) * c;
+          grid.insertAdjacentHTML('beforeend', `<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${this.height}" stroke="currentColor" opacity="0.08"/>`);
+        }
+      }
+    }
+    push(value) {
+      if (value === null || value === undefined || Number.isNaN(value)) { return; }
+      const clamped = Math.max(this.min, Math.min(this.max, value));
+      this.points.push(clamped);
+      if (this.points.length > this.capacity) {
+        this.points.shift();
+      }
+      this.render();
+    }
+    setPoints(values = []) {
+      this.points = values
+        .slice(-this.capacity)
+        .map(v => {
+          const num = Number(v);
+          if (Number.isNaN(num)) { return this.min; }
+          return Math.max(this.min, Math.min(this.max, num));
+        });
+      this.render();
+    }
+    getStepX() {
+      return this.capacity > 1 ? (this.width - (this.leftPad + this.rightPad)) / (this.capacity - 1) : 0;
+    }
+    getPointPosition(index, value) {
+      if (value === null || value === undefined || Number.isNaN(value)) { return null; }
+      const clamped = Math.max(this.min, Math.min(this.max, value));
+      const stepX = this.getStepX();
+      const maxX = this.width - this.rightPad;
+      const x = Math.min(this.leftPad + index * stepX, maxX);
+      const range = this.max - this.min;
+      const yNorm = range <= 0 ? 0.5 : (clamped - this.min) / range;
+      const rawY = (this.height - this.bottomPad) - yNorm * (this.height - this.topPad);
+      const y = Math.min(Math.max(rawY, this.topPad), this.height - this.bottomPad);
+      return { x, y };
+    }
+    getLatestPointPosition() {
+      const n = this.points.length;
+      if (n === 0) { return null; }
+      return this.getPointPosition(n - 1, this.points[n - 1]);
+    }
+    getScaledPoint(point) {
+      if (!point) { return null; }
+      const width = this.svg.clientWidth;
+      const height = this.svg.clientHeight;
+      if (!width || !height) { return null; }
+      return {
+        x: (point.x / this.width) * width,
+        y: (point.y / this.height) * height,
+      };
+    }
+    getClampedLatestPosition() {
+      const scaled = this.getScaledPoint(this.getLatestPointPosition());
+      if (!scaled) { return null; }
+      const parent = this.svg.parentElement;
+      const plotWidth = parent ? parent.clientWidth : this.svg.clientWidth;
+      const plotHeight = parent ? parent.clientHeight : this.svg.clientHeight;
+      if (!plotWidth || !plotHeight) { return null; }
+      const margin = 12;
+      const clamp = (value, size) => {
+        if (size <= margin * 2) { return size / 2; }
+        return Math.min(Math.max(value, margin), size - margin);
+      };
+      const x = clamp(scaled.x, plotWidth);
+      const y = clamp(scaled.y, plotHeight);
+      return { x, y };
+    }
+    clear() {
+      this.points = [];
+      this.render();
+    }
+    render() {
+      const n = this.points.length;
+      if (n === 0) {
+        this.poly.setAttribute('points', '');
+        return;
+      }
+      const pts = this.points
+        .map((value, index) => {
+          const pos = this.getPointPosition(index, value);
+          return pos ? `${pos.x.toFixed(1)},${pos.y.toFixed(1)}` : null;
+        })
+        .filter(Boolean);
+      this.poly.setAttribute('points', pts.join(' '));
+    }
+  }
+
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const randomStep = (current, baseline, jitter) => {
+    const drift = (baseline - current) * 0.08;
+    const noise = (Math.random() * 2 - 1) * jitter;
+    return current + drift + noise;
+  };
+  const DEGREE = '\u00B0';
+  const METRICS = {
+    spo2: { min: 85, max: 100, jitter: 0.25, decimals: 0, suffix: '%' },
+    hr:   { min: 90, max: 220, jitter: 2.5, decimals: 0, suffix: ' bpm' },
+    o2:   { min: 0,  max: 10,  jitter: 0.2, decimals: 1, suffix: ' L/min' },
+    temp: { min: 30, max: 38, jitter: 0.08, decimals: 1, suffix: ` ${DEGREE}C` },
+  };
+  const METRIC_KEYS = Object.keys(METRICS);
+  const HISTORY_CAPACITY = 60;
+
+  const SCENARIOS = {
+    normal: {
+      label: 'Stable',
+      description: 'Vitals track within expected ranges with low variance.',
+      jitter: 1.0,
+    },
+    moderate: {
+      label: 'Elevated risk',
+      description: 'Noticeable drift from targets with moderate variability.',
+      jitter: 1.25,
+    },
+    critical: {
+      label: 'Critical escalation',
+      description: 'Sustained stress with large swings and high support demand.',
+      jitter: 1.5,
+    },
+  };
+
+  const SCENARIO_PRESETS = {
+    1: {
+      normal:   { spo2: 99, hr: 172, o2: 5.0, temp: 32.4 },
+      moderate: { spo2: 94, hr: 184, o2: 6.2, temp: 33.6 },
+      critical: { spo2: 88, hr: 198, o2: 7.4, temp: 34.7 },
+    },
+    2: {
+      normal:   { spo2: 97, hr: 158, o2: 3.5, temp: 33.0 },
+      moderate: { spo2: 92, hr: 170, o2: 4.8, temp: 33.8 },
+      critical: { spo2: 88, hr: 186, o2: 6.1, temp: 34.6 },
+    },
+    3: {
+      normal:   { spo2: 98, hr: 166, o2: 4.0, temp: 34.0 },
+      moderate: { spo2: 93, hr: 178, o2: 5.8, temp: 34.6 },
+      critical: { spo2: 89, hr: 194, o2: 7.0, temp: 35.2 },
+    },
+  };
+
+  const BABY_CONFIGS = [
+    { id: 1, name: 'Baby One', scenario: null },
+    { id: 2, name: 'Baby Two', scenario: null },
+    { id: 3, name: 'Baby Three', scenario: null },
+  ];
+
+  const createBaby = (id, name, scenarioKey=null) => {
+    const baby = { id, name, scenario: scenarioKey, jitterScale: 1, hasData: false };
+    METRIC_KEYS.forEach(metric => {
+      baby[metric] = null;
+      baby[`${metric}Base`] = null;
+    });
+    baby.history = METRIC_KEYS.reduce((record, metric) => {
+      record[metric] = [];
+      return record;
+    }, {});
+    if (scenarioKey) {
+      applyScenario(id, scenarioKey, { silent: true, targetBaby: baby });
+    }
+    return baby;
+  };
+
+  const state = {
+    running: false,
+    t: null,
+    activeBaby: null,
+    babies: {},
+  };
+
+  BABY_CONFIGS.forEach(({id, name, scenario}) => {
+    state.babies[id] = createBaby(id, name, scenario);
+  });
+
+  const formatMetric = (metric, value) => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return '--';
+    }
+    const { decimals, suffix } = METRICS[metric];
+    const base = decimals === 0 ? Math.round(value) : value.toFixed(decimals);
+    return `${base}${suffix}`;
+  };
+
+  const detailEls = METRIC_KEYS.reduce((acc, metric) => {
+    acc.modal[metric] = document.getElementById(`m-${metric}`);
+    acc.chartHead[metric] = document.getElementById(`val-${metric}`);
+    acc.marker[metric] = document.getElementById(`marker-${metric}`);
+    return acc;
+  }, { modal: {}, chartHead: {}, marker: {} });
+
+  const tileEls = BABY_IDS.reduce((acc, id) => {
+    const key = String(id);
+    acc[key] = METRIC_KEYS.reduce((map, metric) => {
+      map[metric] = document.getElementById(`b${id}-${metric}`);
+      return map;
+    }, {});
+    return acc;
+  }, {});
+
+  const charts = {
+    spo2: new LineChart($('#chart-spo2'), { min: METRICS.spo2.min, max: METRICS.spo2.max, capacity: HISTORY_CAPACITY }),
+    hr:   new LineChart($('#chart-hr'),   { min: METRICS.hr.min,   max: METRICS.hr.max,   capacity: HISTORY_CAPACITY }),
+    o2:   new LineChart($('#chart-o2'),   { min: METRICS.o2.min,   max: METRICS.o2.max,   capacity: HISTORY_CAPACITY }),
+    temp: new LineChart($('#chart-temp'), { min: METRICS.temp.min, max: METRICS.temp.max, capacity: HISTORY_CAPACITY }),
+  };
+
+  const updatePatientCardAppearance = (baby) => {
+    const key = String(baby.id);
+    const card = patientCards[key];
+    const status = cardStatusLabels[key];
+    if (!card || !status) { return; }
+    if (!baby.hasData || !baby.scenario) {
+      card.dataset.scenario = 'unknown';
+      status.textContent = 'Waiting';
+      return;
+    }
+    const meta = SCENARIOS[baby.scenario];
+    card.dataset.scenario = baby.scenario;
+    status.textContent = meta ? meta.label : 'Live';
+  };
+
+  const updateScenarioCard = (baby) => {
+    const key = String(baby.id);
+    const meta = baby.scenario ? SCENARIOS[baby.scenario] : null;
+    const card = scenarioCards[key];
+    if (card) {
+      card.dataset.scenario = meta && baby.scenario ? baby.scenario : 'unknown';
+    }
+    if (scenarioPills[key]) {
+      scenarioPills[key].textContent = meta ? meta.label : 'Not set';
+    }
+    if (scenarioDescs[key]) {
+      scenarioDescs[key].textContent = meta ? meta.description : 'Pick a baseline or start the demo to auto-detect.';
+    }
+    updatePatientCardAppearance(baby);
+  };
+
+  const updateModalScenario = (baby) => {
+    if (!modalSub) { return; }
+    if (!baby || !baby.scenario || !baby.hasData) {
+      modalSub.textContent = 'Waiting for live data | 1s cadence | last 60s';
+      return;
+    }
+    const meta = SCENARIOS[baby.scenario];
+    modalSub.textContent = `${meta ? meta.label : 'Live'} baseline | 1s cadence | last 60s`;
+  };
+
+  const placeMarker = (metric, chart, value) => {
+    const marker = detailEls.marker[metric];
+    if (!marker || !chart) { return; }
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      marker.style.opacity = '0';
+      return;
+    }
+    const position = chart.getClampedLatestPosition();
+    if (!position) {
+      marker.style.opacity = '0';
+      return;
+    }
+    marker.textContent = formatMetric(metric, value);
+    marker.style.left = `${position.x}px`;
+    marker.style.top = `${position.y}px`;
+    marker.style.opacity = '1';
+  };
+
+
+  const syncChartsWithHistory = (baby) => {
+    METRIC_KEYS.forEach(metric => {
+      charts[metric].setPoints(baby.history[metric]);
+    });
+  };
+
+  const updateDetailDisplays = (baby) => {
+    METRIC_KEYS.forEach(metric => {
+      const formatted = formatMetric(metric, baby[metric]);
+      detailEls.modal[metric].textContent = formatted;
+      detailEls.chartHead[metric].textContent = formatted;
+      const chart = charts[metric];
+      placeMarker(metric, chart, baby[metric]);
+    });
+  };
+
+  const applyScenario = (id, scenarioKey, options={}) => {
+    const { silent=false, targetBaby=null } = options;
+    const numericId = Number(id);
+    const key = String(numericId);
+    const baby = targetBaby || state.babies[numericId];
+    if (!baby) { return; }
+
+    if (!scenarioKey) {
+      baby.scenario = null;
+      baby.jitterScale = 1;
+      METRIC_KEYS.forEach(metric => {
+        baby[`${metric}Base`] = null;
+        if (!baby.hasData) {
+          baby[metric] = null;
+          baby.history[metric] = [];
+          if (!silent) {
+            const tileGroup = tileEls[key];
+            if (tileGroup && tileGroup[metric]) {
+              tileGroup[metric].textContent = '--';
+            }
+          }
+        }
+      });
+    } else {
+      const presetMap = SCENARIO_PRESETS[numericId] || {};
+      const preset = presetMap[scenarioKey];
+      const scenarioMeta = SCENARIOS[scenarioKey];
+      baby.scenario = scenarioKey;
+      baby.jitterScale = scenarioMeta ? scenarioMeta.jitter : 1;
+      if (preset) {
+        METRIC_KEYS.forEach(metric => {
+          baby[`${metric}Base`] = preset[metric];
+          if (!baby.hasData) {
+            baby[metric] = null;
+            baby.history[metric] = [];
+          }
+        });
+      }
+    }
+
+    if (silent) { return; }
+
+    updateScenarioCard(baby);
+
+    const select = scenarioSelects[key];
+    if (select) {
+      if (scenarioKey) {
+        select.value = scenarioKey;
+      } else {
+        select.selectedIndex = 0;
+      }
+    }
+
+    if (state.activeBaby === numericId) {
+      updateDetailDisplays(baby);
+      syncChartsWithHistory(baby);
+      updateModalScenario(baby);
+    }
+  };
+
+  const tick = () => {
+    Object.entries(state.babies).forEach(([key, baby]) => {
+      if (!baby.scenario) {
+        applyScenario(baby.id, 'normal');
+      }
+      let producedSample = false;
+      METRIC_KEYS.forEach(metric => {
+        const cfg = METRICS[metric];
+        const baseline = baby[`${metric}Base`];
+        if (baseline === null || baseline === undefined) { return; }
+        const jitterScale = baby.jitterScale || 1;
+        const current = baby[metric] === null || baby[metric] === undefined ? baseline : baby[metric];
+        const nextValue = clamp(
+          randomStep(current, baseline, cfg.jitter * jitterScale),
+          cfg.min,
+          cfg.max
+        );
+        baby[metric] = nextValue;
+        const history = baby.history[metric];
+        history.push(nextValue);
+        if (history.length > HISTORY_CAPACITY) {
+          history.shift();
+        }
+        const tileGroup = tileEls[key];
+        if (tileGroup && tileGroup[metric]) {
+          tileGroup[metric].textContent = formatMetric(metric, nextValue);
+        }
+        producedSample = true;
+      });
+      if (producedSample && !baby.hasData) {
+        baby.hasData = true;
+        updateScenarioCard(baby);
+      }
+    });
+
+    if (!state.activeBaby) { return; }
+    const active = state.babies[state.activeBaby];
+    syncChartsWithHistory(active);
+    updateDetailDisplays(active);
+    updateModalScenario(active);
+  };
+
+  const startDemo = () => {
+    if (state.running) { return; }
+    state.running = true;
+    demoBtn.textContent = 'Stop demo';
+    demoBtn.setAttribute('aria-pressed', 'true');
+    state.t = setInterval(tick, 1000);
+  };
+
+  const stopDemo = () => {
+    if (!state.running) { return; }
+    state.running = false;
+    demoBtn.textContent = 'Start demo';
+    demoBtn.setAttribute('aria-pressed', 'false');
+    clearInterval(state.t);
+    state.t = null;
+  };
+
+  demoBtn.addEventListener('click', () => state.running ? stopDemo() : startDemo());
+
+  // ===== Modal handling =====
+  const modalWrap = $('#modalWrap');
+  const closeModal = () => {
+    modalWrap.style.display = 'none';
+    modalWrap.setAttribute('aria-hidden', 'true');
+    state.activeBaby = null;
+    Object.values(detailEls.marker).forEach(marker => {
+      if (marker) { marker.style.opacity = '0'; }
+    });
+  };
+  $('#backdrop').addEventListener('click', closeModal);
+  $('#closeModal').addEventListener('click', closeModal);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeModal();
+    }
+  });
+
+  const openBabyDetail = (id) => {
+    state.activeBaby = Number(id);
+    const baby = state.babies[state.activeBaby];
+    $('#modalTitle').textContent = `${baby.name} detail`;
+    modalWrap.style.display = 'grid';
+    modalWrap.setAttribute('aria-hidden', 'false');
+    syncChartsWithHistory(baby);
+    updateDetailDisplays(baby);
+    updateModalScenario(baby);
+    requestAnimationFrame(() => {
+      if (state.activeBaby !== baby.id) { return; }
+      syncChartsWithHistory(baby);
+      updateDetailDisplays(baby);
+      updateModalScenario(baby);
+    });
+    $('#closeModal').focus();
+  };
+
+  // Click/keyboard open on any tile or column
+  const attachOpenHandlers = () => {
+    $$('.patient-card').forEach(card => {
+      card.addEventListener('click', () => openBabyDetail(card.dataset.baby));
+      card.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openBabyDetail(card.dataset.baby);
+        }
+      });
+    });
+  };
+  attachOpenHandlers();
+
+  // Scenario control wiring
+  Object.entries(scenarioSelects).forEach(([key, select]) => {
+    const numericId = Number(key);
+    const baby = state.babies[numericId];
+    if (!select || !baby) { return; }
+    if (baby.scenario) {
+      select.value = baby.scenario;
+    } else {
+      select.selectedIndex = 0;
+    }
+    updateScenarioCard(baby);
+    select.addEventListener('change', (event) => {
+      applyScenario(numericId, event.target.value);
+    });
+  });
+
+  // Seed initial overview values
+  Object.entries(tileEls).forEach(([key, metrics]) => {
+    const baby = state.babies[Number(key)];
+    if (!baby) { return; }
+    METRIC_KEYS.forEach(metric => {
+      if (metrics[metric]) {
+        metrics[metric].textContent = formatMetric(metric, baby[metric]);
+      }
+    });
+  });
+  </script>
+</body>
+</html>
